@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#030806">
+<meta name="description" content="NULL SECTOR — a zero-dependency ASCII first-person shooter. Purge five sectors of a haunted orbital station.">
+<title>NULL SECTOR // ASCII FPS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23030806'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='22' fill='%238dffb0'%3E%E2%96%B6%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<noscript><div style="position:fixed;inset:0;z-index:99;background:#020705;color:#9dffb9;display:flex;align-items:center;justify-content:center;font:14px monospace;letter-spacing:.1em;text-align:center;padding:24px">NULL SECTOR 需要启用 JavaScript。<br>ENABLE JAVASCRIPT TO ACCESS THE TERMINAL.</div></noscript>
+<div id="app">
+  <canvas id="screen" aria-label="NULL SECTOR ASCII first person shooter viewport"></canvas>
+
+  <div class="screen-fx" aria-hidden="true">
+    <div class="crt-scanlines"></div>
+    <div class="crt-roll"></div>
+    <div class="crt-vignette"></div>
+    <div class="crt-noise" id="noiseLayer"></div>
+    <div class="damage-layer" id="damageLayer"></div>
+    <div class="flash-layer" id="flashLayer"></div>
+    <div class="glitch-bars" id="glitchLayer"></div>
+    <div class="crt-flicker"></div>
+  </div>
+
+  <div id="hud" class="hidden" aria-live="off">
+    <header class="hud-top">
+      <div class="panel brand-panel">
+        <div class="brand">NULL<span>//</span>SECTOR</div>
+        <div class="brand-sub">ORBITAL AUDIT DAEMON <b>v2.7.1</b></div>
+        <div class="signal-line"><span class="signal-pips"><i></i><i></i><i></i><i></i><i></i></span><span>UPLINK STABLE</span><span id="fpsReadout">60 FPS</span></div>
+      </div>
+
+      <div class="panel sector-panel">
+        <div class="sector-label">SECTOR</div>
+        <div class="sector-number" id="waveNumber">01</div>
+        <div class="sector-rule"></div>
+        <div class="sector-row"><span>HOSTILES</span><b id="hostileCount">--</b></div>
+        <div class="sector-row"><span>OBJECTIVE</span><b id="objectiveText">PURGE THE SECTOR</b></div>
+        <div class="progress-track"><i id="waveProgress"></i></div>
+        <div class="score-row"><span>SCORE <b id="scoreValue">0000000</b></span><span>T+<b id="timerValue">00:00</b></span></div>
+      </div>
+
+      <div class="panel radar-panel">
+        <div class="panel-caption"><span>PROXIMITY / SCAN</span><span id="radarStatus">R 12m</span></div>
+        <canvas id="radar" width="400" height="272"></canvas>
+        <div class="radar-legend"><span><i class="lg-player"></i>DAEMON</span><span><i class="lg-threat"></i>THREAT</span><span><i class="lg-loot"></i>LOOT</span></div>
+      </div>
+    </header>
+
+    <div class="boss-bar hidden" id="bossBar">
+      <div class="boss-meta"><span>WARNING // WARDEN-CLASS ENTITY</span><span id="bossHpText">100%</span></div>
+      <div class="boss-track"><i id="bossHp"></i></div>
+    </div>
+
+    <div class="center-stack" aria-hidden="true">
+      <div class="alert-line" id="alertLine"></div>
+      <div class="center-msg" id="centerMsg"></div>
+    </div>
+
+    <div class="reticle" id="reticle">
+      <span class="ret-dot"></span>
+      <span class="ret-tl">.</span><span class="ret-tr">.</span><span class="ret-bl">.</span><span class="ret-br">.</span>
+      <div class="hitmarker" id="hitmarker"><span></span><span></span><span></span><span></span></div>
+      <div class="reload-ring" id="reloadRing"><span id="reloadText">RELOAD</span></div>
+    </div>
+
+    <footer class="hud-bottom">
+      <div class="panel vitals-panel">
+        <div class="vital-row">
+          <span class="vital-key">VITAL</span>
+          <span class="vital-bar" id="vitalBar">[##########]</span>
+          <span class="vital-num" id="vitalNum">100</span>
+        </div>
+        <div class="vital-row">
+          <span class="vital-key">DASH</span>
+          <span class="vital-bar dash-bar" id="dashBar">[##########]</span>
+          <span class="vital-num small" id="dashText">READY</span>
+        </div>
+        <div class="diagnostic-line"><span id="diagnosticText">CORE INTEGRITY NOMINAL</span><span class="carrier">▮</span></div>
+      </div>
+
+      <div class="panel weapon-panel">
+        <div class="weapon-header"><span id="weaponName">VX-9 PULSE</span><span id="weaponMode">SEMI / HITSCAN</span></div>
+        <div class="ammo-row"><span class="ammo-mag" id="ammoMag">30</span><span class="ammo-slash">/</span><span class="ammo-reserve" id="ammoReserve">090</span><span class="ammo-label">CELLS</span></div>
+        <div class="ammo-track" id="ammoTrack"></div>
+        <div class="weapon-footer"><span><kbd>1</kbd> PULSE</span><span><kbd>2</kbd> SCATTER</span><span><kbd>R</kbd> RELOAD</span></div>
+      </div>
+    </footer>
+
+    <div class="hud-hint" id="hudHint"><span id="lockFallback" class="hidden">[!] LOCK OFFLINE <kbd>←</kbd><kbd>→</kbd> TURN <span>/</span> <kbd>RMB</kbd> LOOK <span>/</span></span><kbd>M</kbd> AUDIO <b id="audioState">ON</b> <span>/</span> <kbd>F</kbd> FULLSCREEN <span>/</span> <kbd>ESC</kbd> SUSPEND</div>
+    <div class="pickup-feed" id="pickupFeed"></div>
+  </div>
+
+  <section id="titleScreen" class="overlay title-screen">
+    <div class="title-shell">
+      <div class="title-topline">
+        <span class="rec"><i></i>REC</span>
+        <span class="topline-copy">ORBITAL AUDIT DIVISION // EMERGENCY BROADCAST 07</span>
+        <span class="title-clock" id="titleClock">2087.11.16 — 02:36:27</span>
+      </div>
+
+      <div class="title-main">
+        <div class="logo-wrap">
+          <div class="eyebrow"><span>ASCII COMBAT PROTOCOL</span><span>BUILD 09.17 / CLASSIFIED</span></div>
+          <pre class="logo" data-text=" _   _  _   _  _      _       ____   _____   ____  _____   ___   ____
+| \ | || | | || |    | |     / ___| | ____| / ___||_   _| / _ \ |  _ \
+|  \| || | | || |    | |     \___ \ |  _|  | |      | |  | | | || |_) |
+| |\  || |_| || |___ | |___   ___) || |___ | |___   | |  | |_| ||  _ <
+|_| \_| \___/ |_____||_____| |____/ |_____| \____|  |_|   \___/ |_| \_\"> _   _  _   _  _      _       ____   _____   ____  _____   ___   ____
+| \ | || | | || |    | |     / ___| | ____| / ___||_   _| / _ \ |  _ \
+|  \| || | | || |    | |     \___ \ |  _|  | |      | |  | | | || |_) |
+| |\  || |_| || |___ | |___   ___) || |___ | |___   | |  | |_| ||  _ <
+|_| \_| \___/ |_____||_____| |____/ |_____| \____|  |_|   \___/ |_| \_\</pre>
+          <div class="logo-underline">
+            <span>FIRST-PERSON // LAST-RESORT</span>
+            <span class="logo-cursor">█</span>
+          </div>
+        </div>
+
+        <div class="title-copy">
+          <div class="copy-index">FILE 0x00A7 / INCIDENT REPORT</div>
+          <p class="lead-zh">轨道站 <b>NULL SECTOR</b> 已失联 43 天。<br>你是最后一个审计守护进程。<br>清除所有失控单元，重启核心。</p>
+          <p class="lead-en">ALL CREW SIGNALS LOST. HOSTILE SYNTHETICS HAVE TAKEN THE HAB-RING.<br>PURGE FIVE SECTORS. DO NOT LET THE SIGNAL DIE.</p>
+          <div class="start-row">
+            <button id="startBtn" class="start-btn" type="button">
+              <span class="start-bracket">[</span>
+              <span class="start-label"><b>接入终端</b><small>INITIALIZE COMBAT PROTOCOL</small></span>
+              <span class="start-bracket">]</span>
+            </button>
+            <span class="start-note">点击终端或按 ENTER · 鼠标将被锁定 / CLICK OR PRESS ENTER</span>
+          </div>
+          <div class="start-error hidden" id="startError">POINTER LOCK OFFLINE // 使用 ← → 转向，ESC 暂停</div>
+          <div class="controls-grid">
+            <div><kbd>W A S D</kbd><span>移动 / MOVE</span></div>
+            <div><kbd>MOUSE</kbd><span>瞄准 / AIM</span></div>
+            <div><kbd>LMB</kbd><span>射击 / FIRE</span></div>
+            <div><kbd>SPACE</kbd><span>冲刺 / DASH</span></div>
+            <div><kbd>1 / 2</kbd><span>武器 / WEAPONS</span></div>
+            <div><kbd>R</kbd><span>换弹 / RELOAD</span></div>
+            <div><kbd>SHIFT</kbd><span>疾跑 / SPRINT</span></div>
+            <div><kbd>ESC</kbd><span>暂停 / SUSPEND</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="title-lower">
+        <div class="boot-window">
+          <div class="boot-head"><span>/BOOT.LOG</span><span class="boot-live"><i></i>LIVE</span></div>
+          <pre id="bootLog"><span>&gt; orbital relay ............ <b class="ok">[ OK ]</b></span>
+<span>&gt; node 07 / hab-ring ........ <b class="bad">[ LOST ]</b></span>
+<span>&gt; hostile index ............ <b class="warn">147 UNITS</b></span>
+<span>&gt; operator vitals .......... <b class="bad">FLATLINE</b></span>
+<span>&gt; audit daemon ............. <b class="ok">[ ONLINE ]</b></span>
+<span>&gt; weapon sync .............. <b class="ok">[ 2 / 2 ]</b></span>
+<span>&gt; purge protocol ........... <b class="warn">[ ARMED ]</b></span>
+<span class="boot-cursor-line">&gt; awaiting operator input <span class="cursor">█</span></span></pre>
+        </div>
+        <div class="intel-window">
+          <div class="intel-head">THREAT PROFILES // PARTIAL</div>
+          <div class="threat-row"><span class="threat-char threat-mite">'o'</span><span><b>MITE</b><small>SWARM / CONTACT</small></span><span class="threat-risk">LOW</span></div>
+          <div class="threat-row"><span class="threat-char threat-stalker">'@'</span><span><b>STALKER</b><small>RANGED / PLASMA</small></span><span class="threat-risk med">MED</span></div>
+          <div class="threat-row"><span class="threat-char threat-brute">'#'</span><span><b>BRUTE</b><small>HEAVY / MELEE</small></span><span class="threat-risk high">HIGH</span></div>
+          <div class="intel-foot">UNKNOWN WARDEN SIGNATURE DETECTED IN DEEP SECTOR.</div>
+        </div>
+      </div>
+
+      <div class="title-footer">
+        <span>NO SIGNAL <i>//</i> SIGNAL ACQUIRED</span>
+        <span id="bestScore">BEST RUN // ---</span>
+        <span>© 2087 NULL SECTOR</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="pauseScreen" class="overlay pause-screen hidden">
+    <div class="modal">
+      <div class="modal-top"><span>PROCESS SUSPENDED</span><span class="modal-code">0x19 / HALT</span></div>
+      <h2>[ 信号中断 ]</h2>
+      <p class="modal-sub">COMBAT PROTOCOL SUSPENDED</p>
+      <div class="modal-stats">
+        <div><span>SECTOR</span><b id="pauseWave">01</b></div>
+        <div><span>SCORE</span><b id="pauseScore">0000000</b></div>
+        <div><span>TIME</span><b id="pauseTime">00:00</b></div>
+      </div>
+      <button id="resumeBtn" class="start-btn modal-btn" type="button"><span class="start-bracket">[</span><span class="start-label"><b>继续执行</b><small>RESUME UPLINK</small></span><span class="start-bracket">]</span></button>
+      <button id="quitBtn" class="text-btn" type="button">ABORT RUN / 返回标题</button>
+      <div class="modal-keys"><span><kbd>ESC</kbd> RESUME</span><span><kbd>M</kbd> AUDIO</span><span><kbd>F</kbd> FULLSCREEN</span></div>
+    </div>
+  </section>
+
+  <section id="endScreen" class="overlay end-screen hidden">
+    <div class="modal end-modal">
+      <div class="modal-top"><span id="endTop">CONNECTION TERMINATED</span><span class="modal-code" id="endCode">ERR_SIGNAL_LOST</span></div>
+      <div class="end-glyph" id="endGlyph">[ X ]</div>
+      <h2 id="endTitle">SIGNAL LOST</h2>
+      <p class="modal-sub" id="endSub">AUDIT DAEMON OFFLINE // THE SECTOR REMAINS HOSTILE</p>
+      <div class="end-stats">
+        <div><span>SECTOR</span><b id="endWave">01</b></div>
+        <div><span>PURGED</span><b id="endKills">000</b></div>
+        <div><span>SCORE</span><b id="endScore">0000000</b></div>
+        <div><span>TIME</span><b id="endTime">00:00</b></div>
+      </div>
+      <div class="end-record hidden" id="endRecord">NEW PERSONAL RECORD // SYSTEM ARCHIVED</div>
+      <button id="rebootBtn" class="start-btn modal-btn" type="button"><span class="start-bracket">[</span><span class="start-label"><b>重新接入</b><small>REBOOT DAEMON</small></span><span class="start-bracket">]</span></button>
+      <button id="endTitleBtn" class="text-btn" type="button">RETURN TO TERMINAL / 返回标题</button>
+    </div>
+  </section>
+
+  <div class="toast-feed" id="toastFeed" aria-live="polite"></div>
+  <div class="rotate-hint">↻ 建议横屏 / ROTATE DEVICE FOR FULL EXPERIENCE</div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>

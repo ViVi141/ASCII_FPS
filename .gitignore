@@ -1,0 +1,14 @@
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# temporary QA / build artefacts
+_qa/
+*.log
+*.tmp
+
+# dependencies (not used by this project, kept for future tooling)
+node_modules/
